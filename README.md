@@ -28,19 +28,10 @@
 
 ## Usage
 1. Dockerfileをビルドして、rails gem入りのDocker Imageを作る
-```
-docker build . --tag=rails-on-k8s 
-```
-
 
 2. Docker Image を runして、 bundle exec rails new する
 (makeコマンド, databaseは？)
-
-```
-docker container run
 docker exec rails new --database=mysql --skip-test
-```
-
 
 3. Minikubeで動かせるように、deploymentなどを用意する
 - secret
