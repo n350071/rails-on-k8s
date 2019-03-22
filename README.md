@@ -28,6 +28,9 @@
 
 ## Usage
 1. Dockerfileをビルドして、rails gem入りのDocker Imageを作る
+```
+docker build . -t rails-on-k8s
+```
 
 2. Docker Image を runして、 bundle exec rails new する
 (makeコマンド, databaseは？)
