@@ -1,0 +1,68 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: rails
+  labels:
+    app: rails
+spec:
+  ports:
+    - port: 3000
+  selector:
+    app: rails
+    tier: frontend
+  type: LoadBalancer
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: rails-pv-claim
+  labels:
+    app: rails
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: apps/v1 # for versions before 1.9.0 use apps/v1beta2
+kind: Deployment
+metadata:
+  name: rails
+  labels:
+    app: rails
+spec:
+  selector:
+    matchLabels:
+      app: rails
+      tier: frontend
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: rails
+        tier: frontend
+    spec:
+      containers:
+      - image: rails-on-k8s
+        imagePullPolicy: IfNotPresent
+        name: rails
+        env:
+        - name: RAILS_DB_HOST
+          value: rails-mysql
+        - name: RAILS_DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-pass
+              key: password
+        ports:
+        - containerPort: 3000
+          name: rails
+        volumeMounts:
+        - name: rails-persistent-storage
+          mountPath: /var/www/html
+      volumes:
+      - name: rails-persistent-storage
+        persistentVolumeClaim:
+          claimName: rails-pv-claim
