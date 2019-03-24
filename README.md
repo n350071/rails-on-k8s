@@ -4,9 +4,13 @@
 
 - [x] 第一段階 : Railsアプリをminikubeで動かせる(hello yay)
 - [x] 第二段階 : Railsアプリのコードベースを変更したら、それがminikube上で反映されていることが確認できる
-- [ ] 第三段階 : RailsアプリをGKEにデプロイして公開できる
+- [x] 第三段階 : RailsアプリをGKEにデプロイして公開できる
 - [ ] 第四段階 : RailsアプリのIPを固定化し、domainを与え、https化する
 - [ ] 第五段階 : GitOps式のCICD pipeline を実現する
+
+## 注意
+`.gitignore`にて、Railsのファイルを無視しています。
+適宜、外してください。
 
 ## 実行
 ### 第一段階
@@ -27,12 +31,6 @@ DB設定、config/database.ymlを開いて、`password`と`host`を修正する
 password: <%= ENV.fetch("RAILS_DB_PASSWORD") %>
 host: mysql
 ```
-
-動作確認(この時点ではDB connection errorでよい)
-```
-docker run  -p 0.0.0.0:3000:3000 --rm rails-on-k8s bundle exec rails server -p 3000 -b 0.0.0.0
-```
-
 
 #### 2. Minikubeを起動して、クラスタを作成する
 ```
@@ -114,8 +112,133 @@ minikube service rails --url
 設定変更が反映されている
 
 ### 第三段階
+#### GKEにプロジェクトをつくり、アクティベート(課金可能)する
+[gcloud install](https://cloud.google.com/sdk/docs/downloads-interactive?hl=ja)
+
+```
+gcloud projects create <PROJECT-ID>
+gcloud projects list
+gcloud config list
+gcloud config set project <PROJECT-ID>
+gcloud config get-value project
+```
+
+[支払い情報を設定(Billing設定)](https://console.cloud.google.com/billing/linkedaccount)後に以下の設定を行う
+```
+gcloud services enable container.googleapis.com
+gcloud services list --available
+```
+(現時点で、予算設定を超えているとサービスをenableできないようなので、サービス追加できない場合は確認してみてください。)
+
+[gcloud コマンドリファレンス](https://cloud.google.com/sdk/gcloud/reference/projects/)
+
+
 #### GKEにクラスタを作成する
+
+```
+gcloud container clusters create <CLUSTER-NAME> --num-nodes=2 --preemptible
+```
+クラスタのサイズと、リソースの使用量によって値段が変わってくるみたい。
+- [料金の詳細説明](https://cloud.google.com/kubernetes-engine/pricing)
+- [料金表](https://cloud.google.com/compute/pricing)
+- [料金シミュレーター](https://cloud.google.com/products/calculator/#tab=container)
+- [クラスタ作成コマンドリファレンス](https://cloud.google.com/products/calculator/#tab=container)
+
+品質保証のないバージョンでの、デフォルトの`n1-standard-1`ノードを２つ注文で、$14.60の予定(¥1,600)
+
 #### クラスタに対して、Minikubeにやったのとほぼ同じことをする
+##### 現在のソースコードを、GCPのリポジトリに置く
+https://cloud.google.com/container-registry/docs/pushing-and-pulling?hl=en_US&_ga=2.128219916.-1854617211.1547984722
+
+最新の状況を固めて、
+```
+docker build . -t rails-on-k8s
+```
+
+dockerをgcloudで認証し、
+```
+$gcloud auth configure-docker
+
+The following settings will be added to your Docker config file located at [~/.docker/config.json]:
+ {
+  "credHelpers": {
+    "gcr.io": "gcloud",
+    "us.gcr.io": "gcloud",
+    "eu.gcr.io": "gcloud",
+    "asia.gcr.io": "gcloud",
+    "staging-k8s.gcr.io": "gcloud",
+    "marketplace.gcr.io": "gcloud"
+  }
+}
+
+Do you want to continue (Y/n)?  Y
+
+Docker configuration file updated.
+```
+
+imageにtagをつける
+```
+docker tag [SOURCE_IMAGE] [HOSTNAME]/[PROJECT-ID]/[IMAGE]
+docker tag rails-on-k8s asia.gcr.io/shirofune-labo-rails-on-k8s/rails-on-k8s
+```
+
+pushする
+```
+docker push [HOSTNAME]/[PROJECT-ID]/[IMAGE]
+docker push asia.gcr.io/shirofune-labo-rails-on-k8s/rails-on-k8s
+```
+
+###### [skaffold](https://skaffold.dev/docs/)を使うパターン
+...検証予定
+
+
+##### kubectlでリソース配置
+まず、つながり先を確認
+```
+kubectl config current-context
+```
+
+**railsは、イメージ名がローカルと違うので、ファイルを分けた**
+```
+kubectl create secret generic mysql-pass --from-literal=password=<PASSWORD>
+kubectl apply -f .k8s/k8s-mysql.yaml
+kubectl apply -f .k8s/gke-rails.yaml
+```
+
+DBを作成する。
+<POD_NAME>を確認し、コンテナにログインし、
+```
+kubectl get pods
+kubectl exec -it <POD_NAME> /bin/bash
+```
+
+db:createを実行する
+```
+# bundle exec rails db:create
+Created database 'rails-on-k8s_development'
+Created database 'rails-on-k8s_test'
+```
+
+リソース確認
+```
+kubectl get pvc
+kubectl get deployments
+kubectl get pods
+kubectl describe pods -l app=rails
+kubectl get services
+```
+
+EXTERNAL-IPが発行されるのを待ち、発行されたら、そこへアクセスする
+
+##### リソース足りない問題
+```
+Does not have minimum availability
+```
+の場合には、以下のようにして、ノード数を増やしてみる(課金増える)が、実は、imageを取れてないだけだったりとかもする。
+```
+gcloud container clusters resize rails-on-k8s --size=3
+```
+
 
 
 ---
