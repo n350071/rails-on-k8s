@@ -204,6 +204,124 @@ Created database 'rails-on-k8s_development'
 Created database 'rails-on-k8s_test'
 ```
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#### 手順のリファクタリング
+### 第一段階
+#### 1. [skaffold](https://skaffold.dev/docs/)を利用する
+
+##### 概要
+skaffoldは、kubernetesに対して、Google製のビルド〜デプロイまでを行ってくれるコマンドラインツール。
+開発環境において、ビルドしたイメージをレジストリにアップせずに、直接kubernetesのpodに入れてくれる。
+よって、`docker build . -t <IMAGE_NAME>:<VERSION>`のような作業や、dockerへのpushなどが不要になる。
+
+##### インストール
+```
+brew install skaffold
+```
+
+##### 使い方
+1. [skaffold.yaml](https://github.com/GoogleContainerTools/skaffold/blob/master/examples/getting-started/skaffold.yaml)を設置、build.artifacts.imageを、任意の<IMAGE_NAME>に書き換える。
+2. `skaffold dev --cache-artifacts` を実行
+--cache-artifacts : キャッシュする ($HOME/.skaffold/cache)
+これで、ローカルで変更があるたびに、kubernetesの<IMAGE_NAME>を使うpod内のcontainerが置き換わる。
+
+##### 詳細
+- [Reference cli dev](https://skaffold.dev/docs/references/cli/#skaffold-dev)
+- [skaffold.yaml](https://skaffold.dev/docs/references/yaml/)
+- [参考記事](https://qiita.com/tomoyamachi/items/660bd7bb3afff8340307#skaffold%E3%81%AB%E3%81%A4%E3%81%84%E3%81%A6)
+
+#### 2. Minikubeを起動して、リソースを配置する
+
+##### クラスタを作成し、順次実行する
+クラスタ作成 (必要なら、`minikube delete`してからでもいいかも.. )
+```
+minikube start
+```
+
+リソース配置
+```
+kubectl create secret generic mysql-pass --from-literal=password=<PASSWORD>
+kubectl apply -f k8s-mysql.yaml
+kubectl apply -f k8s-rails.yaml
+```
+
+リソース確認
+```
+kubectl get pvc
+kubectl get deployments
+kubectl get pods
+kubectl get services
+```
+
+minikubeから、rails serviceに対して、EXTERNAL-IPを与える(その後に`kubectl get services`をしても出てこないが..)
+```
+minikube service rails --url
+```
+なお、 `minikube service rails`でブラウザが開く。
+
+#### 3. Rails newする
+
+まず、podの名前を確認する
+```
+kubectl get pods
+```
+
+railsのpodに対して、rails newを行う
+```
+kubectl exec <POD_NAME> bundle exec rails new . --database=mysql --skip-test
+
+```
+
+↓不要かな？
+#### db:create
+```
+$kubectl exec -it rails-7c5554945c-j8rh9 /bin/bash
+root@rails-7c5554945c-j8rh9:/myapp# bundle exec rails db:create
+Created database 'rails-on-k8s_development'
+Created database 'rails-on-k8s_test'
+```
+
+
+---
+Docker Image を runして、 bundle exec rails new する
+
+```
+docker run --rm -v $PWD:$PWD -w $PWD rails-on-k8s bundle exec rails new . --database=mysql --skip-test
+```
+
+参考になった記事
+[Dockerコンテナからホスト側カレントディレクトリにアクセス](https://qiita.com/yoichiwo7/items/ce2ade791462b4f50cf3)
+- --rmオプションでDockerコンテナのプロセス(コマンド)が終了した時点でコンテナを破棄します。コマンド終了後にDockerコンテナ上のファイルを色々とアクセスしたい場合は外しても構いません。
+- --userオプションでホスト側のUIDを指定します。指定しない場合、生成したファイル等の所有者がroot:rootとなるためホスト側のユーザが編集したり削除したりできません。
+- -v $PWD:$PWDオプションで、ホスト側カレントディレクトリとコンテナ側カレントディレクトリのボリューム内容を一致させます。
+- -w $PWDオプションで、ホスト側カレントディレクトリとコンテナ側カレントディレクトリのディレクトリパスを一致させます。-v $PWD:$PWDオプションと組み合わせて使います。
+
+
+動作確認
+```
+docker run  -p 0.0.0.0:3000:3000 --rm rails-on-k8s bundle exec rails server -p 3000 -b 0.0.0.0
+```
+
+
+
+
+
+
 ### 第二段階
 
 
