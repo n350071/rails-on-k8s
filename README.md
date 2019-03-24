@@ -3,7 +3,7 @@
 以下を目指す
 
 - [x] 第一段階 : Railsアプリをminikubeで動かせる(hello yay)
-- [ ] 第二段階 : Railsアプリのコードベースを変更したら、それがminikube上で反映されていることが確認できる
+- [x] 第二段階 : Railsアプリのコードベースを変更したら、それがminikube上で反映されていることが確認できる
 - [ ] 第三段階 : RailsアプリをGKEにデプロイして公開できる
 - [ ] 第四段階 : RailsアプリのIPを固定化し、domainを与え、https化する
 - [ ] 第五段階 : GitOps式のCICD pipeline を実現する
@@ -111,6 +111,11 @@ minikube service rails --url
 - database設定のhostも、Secretsリソースから読み取るようにしたい
 
 ### 第二段階
+設定変更が反映されている
+
+### 第三段階
+#### GKEにクラスタを作成する
+#### クラスタに対して、Minikubeにやったのとほぼ同じことをする
 
 
 ---
